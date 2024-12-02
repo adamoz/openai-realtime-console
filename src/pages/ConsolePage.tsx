@@ -16,7 +16,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { RealtimeClient } from '@openai/realtime-api-beta';
 import { ItemType } from '@openai/realtime-api-beta/dist/lib/client.js';
 import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
-import { instruction1, instruction2 } from '../utils/conversation_config.js';
+import { instructions } from '../utils/conversation_config.js';
 import { WavRenderer } from '../utils/wav_renderer';
 
 import { X, Edit, Zap, ArrowUp, ArrowDown } from 'react-feather';
@@ -25,6 +25,7 @@ import { Toggle } from '../components/toggle/Toggle';
 import { saveAs } from 'file-saver';
 
 let globalMessageCounter = 0; // Global counter for messages
+let symptomCounter = 0; // Counter for symptoms
 const processedItems = new WeakMap<object, boolean>(); // Track processed state for items
 
 
@@ -98,7 +99,6 @@ export function ConsolePage() {
    * - memoryKv is for set_memory() function
    * - coords, marker are for get_weather() function
    */
-  const [currentInstruction, setCurrentInstruction] = useState(instruction1);
   const [items, setItems] = useState<ItemType[]>([]);
   const [realtimeEvents, setRealtimeEvents] = useState<RealtimeEvent[]>([]);
   const [expandedEvents, setExpandedEvents] = useState<{
@@ -118,11 +118,9 @@ export function ConsolePage() {
   
     // Disconnect if currently connected
     if (client.isConnected()) {
-      console.log('toggleInstructions: disconnecting...', isConnected, client.isConnected());
       await wavRecorder.end();
       await wavStreamPlayer.interrupt();
       await client.disconnect();
-      console.log('toggleInstructions: disconnected...');
 
       setIsConnected(false);
       setRealtimeEvents([]);
@@ -131,34 +129,36 @@ export function ConsolePage() {
     }
   
     // Toggle instructions
-    const newInstruction = currentInstruction === instruction1 ? instruction2 : instruction1;
-    setCurrentInstruction(newInstruction);
-  
-    // Update session with new instructions
-    client.updateSession({ instructions: newInstruction });
-  
-    // Reconnect to apply new session settings
-    await wavRecorder.begin();
-    await wavStreamPlayer.connect();
-    await client.connect();
-  
-    // Update state to reflect connection status
-    startTimeRef.current = new Date().toISOString();
-    setIsConnected(true);
-    setRealtimeEvents([]);
-    setItems(client.conversation.getItems());
+    if (symptomCounter < (instructions.length-1)){
+      symptomCounter = (symptomCounter + 1) % instructions.length;
+      const newInstruction = instructions[symptomCounter];
+    
+      // Update session with new instructions
+      client.updateSession({ instructions: newInstruction });
+    
+      // Reconnect to apply new session settings
+      await wavRecorder.begin();
+      await wavStreamPlayer.connect();
+      await client.connect();
+    
+      // Update state to reflect connection status
+      startTimeRef.current = new Date().toISOString();
+      setIsConnected(true);
+      setRealtimeEvents([]);
+      setItems(client.conversation.getItems());
 
-    // Send "Hello!" message after reconnection
-    client.sendUserMessageContent([
-      {
-        type: 'input_text',
-        text: 'Hello!',
-      },
-    ]);
-  
-    // Start recording if using server VAD
-    if (client.getTurnDetectionType() === 'server_vad') {
-      await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+      // Send "Hello!" message after reconnection
+      client.sendUserMessageContent([
+        {
+          type: 'input_text',
+          text: 'Hello!',
+        },
+      ]);
+    
+      // Start recording if using server VAD
+      if (client.getTurnDetectionType() === 'server_vad') {
+        await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+      }
     }
   };
   
@@ -410,7 +410,8 @@ export function ConsolePage() {
     const client = clientRef.current;
 
     // Set instructions
-    client.updateSession({ instructions: instruction1 });
+    client.updateSession({ instructions: instructions[0]});
+    symptomCounter = 0;
     // Set transcription, otherwise we don't get user transcriptions back
     client.updateSession({ input_audio_transcription: { model: 'whisper-1' } });
 
@@ -457,6 +458,22 @@ export function ConsolePage() {
       async () => {
         console.log('next_question tirggered');
         toggleInstructions();
+        return { ok: true };
+      }
+    );
+    client.addTool(
+      {
+        name: 'finish_conversation',
+        description:
+          'Ends the conversation and saves the conversation data to a file',
+        parameters: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      async () => {
+        console.log('finish_conversation tirggered');
+        disconnectConversation();
         return { ok: true };
       }
     );
@@ -542,7 +559,7 @@ export function ConsolePage() {
           // Save user's audio data (formatted.audio) as a WAV file
           if (item.formatted.audio?.length) {
             const audioUrl = item.formatted.file.url;
-            downloadFileFromUrl(audioUrl, `${globalMessageCounter}_${item.id}_user_audio.wav`);
+            downloadFileFromUrl(audioUrl, `${globalMessageCounter}_${item.id}_user_audio.m4a`);
           }
 
           // Save user's metadata with transcript into a JSON file
