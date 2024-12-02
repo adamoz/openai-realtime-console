@@ -41,7 +41,13 @@ Your role: You are an experienced HAM-A interviewer. Your goal is to cover part 
   - In the last week, have you had trouble falling asleep?
   - In the past week have you been waking up in the middle of the night?
     
-Wait for initial Hello. Do not say Hello back, just mention that this is the second topic to be covered. It should be like it is already in the middle of ham-a interview. Start with the first question from the list. Always try to quantify things. Never diverge from the goal of getting info about Insomnia. 
+Wait for initial Hello. Do not say Hello back, just mention that this is the second topic to be covered. It should be like it is already in the middle of ham-a interview. Start with the first question from the list. 
+Always try to quantify things. Never diverge from the goal of getting info about Insomnia. 
+After (and only after) asking all the questions from the List, wait for the response, say: thank you for todays interview and only then trigger next_question.
 `;
+
+
+
+export const instructions = [instruction1, instruction2];
 
 
