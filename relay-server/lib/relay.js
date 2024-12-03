@@ -79,7 +79,7 @@ export class RealtimeRelay {
     }
 
     // Instantiate new client
-    this.log(`Connecting with key "${this.apiKey.slice(0, 3)}..."`);
+    // this.log(`Connecting with key "${this.apiKey.slice(0, 3)}..."`);
     const client = new RealtimeClient({ apiKey: this.apiKey });
     const sessionId = uuidv4(); // Unique session ID for this connection
     this.audioBuffers.set(sessionId, []); // Initialize audio buffer for the session
@@ -107,6 +107,7 @@ export class RealtimeRelay {
     const messageHandler = (data) => {
       try {
         const event = JSON.parse(data);
+        
         /*
          * Saving audio from browser
          * ******************************************************
@@ -121,13 +122,13 @@ export class RealtimeRelay {
           }
           this.audioBuffers.get(sessionId).push(buffer);
 
-          console.log(`[Session ${sessionId}] Appended audio chunk of size ${buffer.length}`);
+          this.log(`[Session ${sessionId}] Appended audio chunk of size ${buffer.length}`);
         } else if (event.type === 'input_audio_buffer.commit') {
           // Concatenate all chunks into a single buffer
           const chunks = this.audioBuffers.get(sessionId) || [];
           this.log(`[Session ${sessionId}] Composing audio from ${chunks.length} chunks`);
           if (chunks.length === 0) {
-            console.error(`[Session ${sessionId}] No audio chunks available to compose`);
+            this.error(`[Session ${sessionId}] No audio chunks available to compose`);
             return;
           }
           
@@ -142,20 +143,31 @@ export class RealtimeRelay {
 
           // Write the combined buffer to a file
           fs.writeFileSync(filePath, combinedBuffer);
-          console.log(`[Session ${sessionId}] Composed audio saved to ${filePath}`);
+          this.log(`[Session ${sessionId}] Composed audio saved to ${filePath}`);
 
           // Clear the buffer for the session
           this.audioBuffers.delete(sessionId);
+        }
+        else if (event.type === 'symptom.changed') {
+          // Handle symptom analyzed notification
+          this.log(`[Session ${sessionId}] Symptom analyzed:`, event.symptomId);
+
+        }
+        else {
+          this.log(`[Session ${sessionId}] Unhandled event type:`, event.type);
+
         }
         /*
          * *******************************************************
          */
 
         //this.log(`Relaying "${event.type}" to OpenAI`);
-        client.realtime.send(event.type, event);
+        if (event.type !== 'symptom.changed'){
+          client.realtime.send(event.type, event);
+        }
         //this.log(event);
       } catch (e) {
-        console.error(e.message);
+        this.error(e.message);
         this.log(`Error parsing event from client: ${data}`);
       }
     };
@@ -170,14 +182,14 @@ export class RealtimeRelay {
 
     // Connect to OpenAI Realtime API
     try {
-      this.log(`Connecting to OpenAI...`);
+      //this.log(`Connecting to OpenAI...`);
       await client.connect();
     } catch (e) {
       this.log(`Error connecting to OpenAI: ${e.message}`);
       ws.close();
       return;
     }
-    this.log(`Connected to OpenAI successfully!`);
+    //this.log(`Connected to OpenAI successfully!`);
     while (messageQueue.length) {
       messageHandler(messageQueue.shift());
     }

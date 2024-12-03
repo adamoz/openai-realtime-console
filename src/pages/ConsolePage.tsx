@@ -28,7 +28,6 @@ let globalMessageCounter = 0; // Global counter for messages
 let symptomCounter = 0; // Counter for symptoms
 const processedItems = new WeakMap<object, boolean>(); // Track processed state for items
 
-
 import './ConsolePage.scss';
 import { isJsxOpeningLikeElement } from 'typescript';
 
@@ -79,6 +78,20 @@ export function ConsolePage() {
           }
     )
   );
+  
+  // Function to notify the relay server
+  function notifySymptomAnalyzed(symptomId: string) {
+    const client = clientRef.current;
+    if (client.isConnected()) {
+      client.realtime.send('symptom.changed', {
+        symptomId,
+        timestamp: new Date().toISOString(),
+      });
+      console.log('Notified server of analyzed symptom:', symptomId);
+    } else {
+      console.error('RealtimeClient is not connected');
+    }
+  }
 
   /**
    * References for
@@ -132,7 +145,6 @@ export function ConsolePage() {
     if (symptomCounter < (instructions.length-1)){
       symptomCounter = (symptomCounter + 1) % instructions.length;
       const newInstruction = instructions[symptomCounter];
-    
       // Update session with new instructions
       client.updateSession({ instructions: newInstruction });
     
@@ -140,6 +152,7 @@ export function ConsolePage() {
       await wavRecorder.begin();
       await wavStreamPlayer.connect();
       await client.connect();
+      notifySymptomAnalyzed(`${symptomCounter}`);
     
       // Update state to reflect connection status
       startTimeRef.current = new Date().toISOString();
@@ -219,6 +232,7 @@ export function ConsolePage() {
 
     // Connect to realtime API
     await client.connect();
+    
     client.sendUserMessageContent([
       {
         type: `input_text`,
